@@ -45,7 +45,36 @@ module "vpc" {
       target_tags   = ["mongodb"]
     }
   ]
+
+  egress_rules = [
+    {
+      name      = "allow-http-https-egress"
+      direction = "EGRESS"
+      allow = [{
+        protocol = "tcp"
+        ports    = ["80", "443"]
+      }]
+      destination_ranges = ["0.0.0.0/0"]
+    }
+  ]
 }
+
+
+# NAT
+resource "google_compute_router" "nat_router" {
+  name    = "nat-router"
+  network = module.vpc.network_self_link
+  region  = var.region
+}
+
+resource "google_compute_router_nat" "cloud_nat" {
+  name                               = "cloud-nat"
+  router                             = google_compute_router.nat_router.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+}
+
 
 # DNS
 resource "google_dns_managed_zone" "internal_zone" {
