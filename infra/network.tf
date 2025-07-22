@@ -8,10 +8,10 @@ module "vpc" {
 
   subnets = [
     {
-      subnet_name                = "subnet-01"
-      subnet_ip                  = var.subnets[0]
-      subnet_region              = var.region
-      subnet_private_access      = true
+      subnet_name           = "subnet-01"
+      subnet_ip             = var.subnets[0]
+      subnet_region         = var.region
+      subnet_private_access = true
     }
   ]
 
@@ -32,7 +32,7 @@ module "vpc" {
         ports    = ["22"]
       }]
       source_ranges = ["0.0.0.0/0"]
-      target_tags   = ["mongodb"]
+      target_tags   = ["mongodb", "bastion"]
     },
     {
       name      = "allow-mongo"
@@ -95,7 +95,7 @@ resource "google_dns_record_set" "mongo_a_records" {
   for_each = {
     for vm in google_compute_instance.mongo_vm :
     vm.name => {
-      name = "${vm.hostname}.${google_dns_managed_zone.internal_zone.dns_name}"
+      name = "${vm.hostname}."
       ip   = vm.network_interface[0].network_ip
     }
   }

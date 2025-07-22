@@ -1,5 +1,11 @@
+output "bastion_ip" {
+  value = local.bastion_ip
+}
+
 output "mongo_hosts" {
-  value = [for host in google_compute_instance.mongo_vm :
-    "${host.hostname}"
-  ]
+  value = local.mongo_hosts
+}
+
+output "mongo_ips" {
+  value = local.mongo_ips
 }
