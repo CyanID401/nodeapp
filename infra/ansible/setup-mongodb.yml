@@ -1,0 +1,173 @@
+- name: Deploy MongoDB via Docker Compose with systemd
+  hosts: mongo_group
+  become: true
+  vars:
+    mongo_user: "{{ lookup('env', 'MONGO_INITDB_ROOT_USER') }}"
+    mongo_pass: "{{ lookup('env', 'MONGO_INITDB_ROOT_PASS') }}"
+    mongo_uid: 4444
+    mongo_port: 27017
+    data_dir: "/data"
+    container_name: "mongo"
+    service_name: "mongo-container.service"
+    service_path: "/etc/systemd/system/mongo-container.service"
+
+  tasks:
+    - name: Ensure group 'mongo' exists with GID
+      group:
+        name: mongo
+        gid: "{{ mongo_uid }}"
+        state: present
+
+    - name: Ensure user 'mongo' exists with UID and GID
+      user:
+        name: mongo
+        uid: "{{ mongo_uid }}"
+        group: "{{ mongo_uid }}"
+        shell: /usr/sbin/nologin
+        create_home: false
+        system: true
+
+    - name: Create data directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ mongo_uid }}"
+        group: "{{ mongo_uid }}"
+        mode: '0755'
+      loop:
+        - "{{ data_dir }}"
+        - "{{ data_dir }}/db"
+        - "{{ data_dir }}/configdb"
+
+    - name: Check if systemd service exists
+      stat:
+        path: "{{ service_path }}"
+      register: mongo_service
+
+    - name: Generate MongoDB keyfile locally
+      delegate_to: localhost
+      run_once: true
+      command: "openssl rand -base64 756"
+      register: mongo_keyfile_content
+      changed_when: false
+
+    - name: Check if mongodb-keyfile already exists
+      stat:
+        path: "{{ data_dir }}/mongodb-keyfile"
+      register: keyfile_stat
+
+    - name: Deploy MongoDB keyfile to all replica set nodes
+      copy:
+        content: "{{ mongo_keyfile_content.stdout }}"
+        dest: "{{ data_dir }}/mongodb-keyfile"
+        owner: "{{ mongo_uid }}"
+        group: "{{ mongo_uid }}"
+        mode: "0600"
+      when: not keyfile_stat.stat.exists
+
+    - name: Write MongoDB configuration file
+      copy:
+        dest: "{{ data_dir }}/mongod.conf"
+        content: |
+            storage:
+              dbPath: {{ data_dir }}/db
+            replication:
+              replSetName: rs0
+            security:
+              authorization: enabled
+              keyFile: /etc/mongodb-keyfile
+            net:
+              bindIp: 0.0.0.0
+              port: {{ mongo_port }}
+        owner: "{{ mongo_uid }}"
+        group: "{{ mongo_uid }}"
+        mode: "0644"
+
+    - name: Write Docker Compose file
+      copy:
+        dest: "{{ data_dir }}/compose.yml"
+        content: |
+          services:
+            mongo:
+              image: mongo:7.0.22
+              container_name: "{{ container_name }}"
+              user: "{{ mongo_uid }}:{{ mongo_uid }}"
+              restart: unless-stopped
+              environment:
+                MONGO_INITDB_ROOT_USERNAME: "{{ mongo_user }}"
+                MONGO_INITDB_ROOT_PASSWORD: "{{ mongo_pass }}"
+              ports:
+                - "{{ mongo_port }}:{{ mongo_port }}"
+              volumes:
+                - {{ data_dir }}/db:/data/db
+                - {{ data_dir }}/configdb:/data/configdb
+                - {{ data_dir }}/mongod.conf:/etc/mongod.conf:ro
+                - {{ data_dir }}/mongodb-keyfile:/etc/mongodb-keyfile:ro
+              command: ["mongod", "--config", "/etc/mongod.conf"]
+        owner: "{{ mongo_uid }}"
+        group: "{{ mongo_uid }}"
+        mode: "0644"
+
+    - name: Write systemd unit file
+      copy:
+        dest: "{{ service_path }}"
+        content: |
+          [Unit]
+          Description=MongoDB Docker Compose Service
+          Requires=docker.service
+          After=docker.service
+
+          [Service]
+          WorkingDirectory={{ data_dir }}
+          ExecStart=/usr/bin/docker compose up
+          ExecStop=/usr/bin/docker compose down
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd
+      command: systemctl daemon-reload
+
+    - name: Enable and start MongoDB container service
+      systemd:
+        name: mongo-container.service
+        enabled: yes
+        state: started
+
+    - name: Wait for MongoDB container to be running
+      shell: |
+        until [ "$(docker inspect -f '{{ '{{ .State.Running }}' }}' {{ container_name }})" = "true" ]; do
+          sleep 2
+        done
+      retries: 10
+      delay: 3
+      register: result
+      until: result.rc == 0
+
+    - name: Wait for MongoDB to accept connections
+      shell: |
+        until docker exec {{ container_name }} mongosh --eval "db.adminCommand('ping')" &>/dev/null; do
+          sleep 2
+        done
+      retries: 10
+      delay: 3
+      register: mongo_ready
+      until: mongo_ready.rc == 0
+
+    - name: Initialize MongoDB replica set dynamically
+      shell: |
+        docker exec {{ container_name }} mongosh -u {{ mongo_user }} -p {{ mongo_pass }} --eval '
+        rs.initiate({
+          _id: "rs0",
+          members: [
+          {% for host in groups["mongo_group"] %}
+            {
+              _id: {{ loop.index0 }},
+              host: "{{ host }}:{{ mongo_port }}"
+              {% if loop.last %}, arbiterOnly: true{% endif %}
+            }{{ "," if not loop.last }}
+          {% endfor %}
+          ]
+        })'
+      run_once: true
+      delegate_to: "{{ groups['mongo_group'][0] }}"
