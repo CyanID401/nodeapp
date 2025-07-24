@@ -9,11 +9,26 @@ module "vpc" {
   subnets = [
     {
       subnet_name           = "subnet-01"
-      subnet_ip             = var.subnets[0]
+      subnet_ip             = "10.10.10.0/24"
       subnet_region         = var.region
       subnet_private_access = true
     }
   ]
+
+  secondary_ranges = {
+    subnet-01 = [
+      {
+        range_name    = "gke-pods-range"
+        ip_cidr_range = "10.20.0.0/16"
+      }
+      ,
+      {
+        range_name    = "gke-services-range"
+        ip_cidr_range = "10.30.0.0/20"
+      }
+    ]
+}
+
 
   ingress_rules = [
     {
