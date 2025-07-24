@@ -10,6 +10,10 @@ output "mongo_ips" {
   value = local.mongo_ips
 }
 
+output "artifact_repo_name" {
+  value = local.artifact_repo_name
+}
+
 output "k8s_cluster_name" {
   value = google_container_cluster.primary.name
 }

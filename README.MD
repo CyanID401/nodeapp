@@ -17,6 +17,13 @@ ansible-playbook -i ansible/inventory.ini ansible/config.yml
 This will configure MongoDB in a container with replication.
 
 
+Build & Push and image to the newly created private repo:
+```bash
+export REPO_URL=$(terraform output -raw artifact_repo_name)
+export IMAGE_TAG="1.0"
+ansible-playbook ansible/image-push.yml
+```
+
 # Deploy to GKE
 
 Get the kube config:
