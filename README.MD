@@ -1,5 +1,14 @@
+# Overview
+The project contains Terraform code with which you can provision the following GCP infra:
+- VPC
+- 1 Bastion VM
+- 3 VMs for MongoDB (initialize with Ansible)
+- Artifact Registry for our app image (build & push with Ansible)
+- GKE Cluster and Nodes
+
 # Initial Setup
 
+Provision the infrastructure:
 ```bash
 cd infra && terraform apply
 ```
@@ -14,10 +23,10 @@ Inventory is generated automatically with Terraform and you can execute:
 ```bash
 ansible-playbook -i ansible/inventory.ini ansible/config.yml
 ```
-This will configure MongoDB in a container with replication.
+This will configure MongoDB in a container in each VM and setup replication for them.
 
 
-Build & Push and image to the newly created private repo:
+Build & push an image of the nodeapp to the newly created private repo:
 ```bash
 export REPO_URL=$(terraform output -raw artifact_repo_name)
 export IMAGE_TAG="1.0"
