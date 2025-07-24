@@ -83,6 +83,43 @@ spec:
     app: nodeapp
   ports:
   - protocol: TCP
-    port: 3000
+    port: 80
     targetPort: 3000
   type: ClusterIP
+
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: nodeapp-managed-cert
+  namespace: nodeapp
+spec:
+  domains:
+  - nodeapp.hyperbit.cloud
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nodeapp-ingress
+  annotations:
+    kubernetes.io/ingress.class: gce
+    networking.gke.io/managed-certificates: nodeapp-managed-cert
+  namespace: nodeapp
+spec:
+  defaultBackend:
+    service:
+      name: nodeapp-service
+      port:
+        number: 80
+  rules:
+  - host: nodeapp.hyperbit.cloud
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nodeapp-service
+            port:
+              number: 80
