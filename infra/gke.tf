@@ -14,6 +14,10 @@ resource "google_container_cluster" "primary" {
   network    = module.vpc.network_self_link
   subnetwork = module.vpc.subnets["${var.region}/subnet-01"].self_link
 
+  private_cluster_config {
+    enable_private_nodes = true
+  }
+
   ip_allocation_policy {
     cluster_secondary_range_name  = "gke-pods-range"
     services_secondary_range_name = "gke-services-range"
@@ -41,9 +45,7 @@ resource "google_container_node_pool" "primary_nodes" {
     service_account = google_service_account.gke_node_sa.email
 
     oauth_scopes = [
-      "https://www.googleapis.com/auth/logging.write",
-      "https://www.googleapis.com/auth/monitoring",
-      "https://www.googleapis.com/auth/devstorage.read_only"
+      "https://www.googleapis.com/auth/cloud-platform"
     ]
 
     labels = {
