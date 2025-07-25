@@ -107,6 +107,7 @@ metadata:
     networking.gke.io/managed-certificates: nodeapp-managed-cert
   namespace: nodeapp
 spec:
+  ingressClassName: gce
   defaultBackend:
     service:
       name: nodeapp-service
